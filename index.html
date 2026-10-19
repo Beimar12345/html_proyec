@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de Servo, LEDs y Focos</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; background-color: #7373e2; margin: 0; padding: 20px; }
+    .card { background: rgb(224, 215, 55); padding: 15px; margin: 10px auto; border-radius: 8px; width: 90%; max-width: 400px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); text-align: left; }
+    .focos-card { background: rgb(240, 180, 70); } 
+    .sensor-card { background: rgb(135, 206, 235); } 
+    h2 { font-size: 1.1rem; color: #333; margin-top: 0; }
+    button { padding: 8px 12px; margin: 4px; font-size: 14px; cursor: pointer; border: none; border-radius: 4px; }
+    input[type=range] { width: 100%; }
+    .center { text-align: center; }
+    .status-box { padding: 8px; border-radius: 4px; font-weight: bold; text-align: center; margin-top: 8px; }
+    .status-normal { background-color: #e0e0e0; color: #333; }
+    .status-detected { background-color: #28a745; color: white; }
+    .btn-toggle { background-color: #007bff; color: white; width: 100%; margin-top: 5px; font-weight: bold; }
+    .btn-toggle.active { background-color: #28a745; }
+  </style>
+</head>
+<body>
+  <h1 class="center" style="color: white;">Control Total</h1>
+  
+  <!-- SENSOR Y CONTROL AUTOMÁTICO -->
+  <div class="card sensor-card">
+    <h2>Sensor de Proximidad (Automático)</h2>
+    <p>Distancia: <span id="distanciaVal">--</span> cm</p>
+    <div id="sensorStatus" class="status-box status-normal">Sin vehículos cerca</div>
+    <button id="btnAutoMode" class="btn-toggle" onclick="toggleModoAutomatico()">Modo Automático: APAGADO</button>
+  </div>
+
+  <!-- SERVO -->
+  <div class="card">
+    <h2>Servo (Puerta / Pluma)</h2>
+    <p>Servo 1: <span id="s1Val">90</span>°</p>
+    <input type="range" min="0" max="180" value="90" id="sliderServo1">
+  </div>
+
+  <!-- LEDS (5) -->
+  <div class="card">
+    <h2>LEDs (5)</h2>
+    <div class="center">
+      <button onclick="fetch('/led/1/on')">L1 on</button><button onclick="fetch('/led/1/off')">off</button><br>
+      <button onclick="fetch('/led/2/on')">L2 on</button><button onclick="fetch('/led/2/off')">off</button><br>
+      <button onclick="fetch('/led/3/on')">L3 on</button><button onclick="fetch('/led/3/off')">off</button><br>
+      <button onclick="fetch('/led/4/on')">L4 on</button><button onclick="fetch('/led/4/off')">off</button><br>
+      <button onclick="fetch('/led/5/on')">L5 on</button><button onclick="fetch('/led/5/off')">off</button><br><br>
+      <p style="font-size: 0.9rem; margin: 5px 0;">secuencia de leds:</p>
+      <button onclick="fetch('/leds/secuencia')" style="background-color: #28a745; color: white;">secuencia auto</button>
+      <button onclick="fetch('/leds/apagar')" style="background-color: #dc3545; color: white;">apagar todos</button>
+    </div>
+  </div>
+
+  <!-- FOCOS (3) -->
+  <div class="card focos-card">
+    <h2>Focos (3)</h2>
+    <div class="center">
+      <button onclick="fetch('/foco/1/on')">Foco 1 ON</button>
+      <button onclick="fetch('/foco/1/off')">OFF</button><br>
+      <button onclick="fetch('/foco/2/on')">Foco 2 ON</button>
+      <button onclick="fetch('/foco/2/off')">OFF</button><br>
+      <button onclick="fetch('/foco/3/on')">Foco 3 ON</button>
+      <button onclick="fetch('/foco/3/off')">OFF</button><br><br>
+      <button onclick="fetch('/focos/apagar')" style="background-color: #dc3545; color: white;">Apagar Todos los Focos</button>
+    </div>
+  </div>
+
+  <script>
+    const slider = document.querySelector('#sliderServo1');
+    const valorServo = document.querySelector('#s1Val');
+    let timeout = null;
+    let modoAutoActivo = false;
+
+    // Control manual del slider
+    slider.addEventListener('input', (e) => {
+      const val = e.target.value;
+      valorServo.textContent = val;
+      
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        fetch('/servo1?valor=' + val)
+          .catch(error => console.log('Servidor no conectado:', error));
+      }, 50);
+    });
+
+    // Activar o desactivar el modo automático desde la web
+    function toggleModoAutomatico() {
+      modoAutoActivo = !modoAutoActivo;
+      const btn = document.getElementById('btnAutoMode');
+      
+      if (modoAutoActivo) {
+        btn.textContent = "Modo Automático: ENCENDIDO";
+        btn.className = "btn-toggle active";
+        fetch('/sensor/auto/on').catch(err => {});
+      } else {
+        btn.textContent = "Modo Automático: APAGADO";
+        btn.className = "btn-toggle";
+        fetch('/sensor/auto/off').catch(err => {});
+      }
+    }
+
+    // Actualizar estado del sensor y servo automáticamente en la interfaz
+    function actualizarEstadoSistema() {
+      fetch('/estado')
+        .then(response => response.json())
+        .then(data => {
+          document.getElementById('distanciaVal').textContent = data.distancia;
+          const box = document.getElementById('sensorStatus');
+          
+          if(data.detectado) {
+            box.textContent = "¡Vehículo detectado! Abriendo...";
+            box.className = "status-box status-detected";
+          } else {
+            box.textContent = "Sin vehículos cerca";
+            box.className = "status-box status-normal";
+          }
+
+          if (data.anguloServo !== undefined) {
+            slider.value = data.anguloServo;
+            valorServo.textContent = data.anguloServo;
+          }
+        })
+        .catch(err => {});
+    }
+
+    setInterval(actualizarEstadoSistema, 1000);
+  </script>
+</body>
+</html>
